@@ -15,12 +15,11 @@
             background-color: var(--bg-color); margin: 0; padding: 0;
             display: flex; justify-content: center; min-height: 100vh;
         }
-        #login-screen, #status-modal, #settings-modal {
+        #status-modal, #settings-modal {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.6); z-index: 9999;
             display: none; align-items: center; justify-content: center;
         }
-        #login-screen { background: var(--bg-color); }
         .modal-box {
             background: white; padding: 25px; border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center; width: 90%; max-width: 450px;
@@ -103,14 +102,7 @@
     </style>
 </head>
 <body>
-    <div id="login-screen" style="display: none;">
-        <div class="modal-box">
-            <h3>🔒 Login (登入)</h3>
-            <p style="color:#666; font-size:0.9em;">Default Password: 12345<br>(請輸入密碼)</p>
-            <input type="password" id="loginPass" class="login-input" placeholder="Password">
-            <button class="btn-main btn-save" onclick="checkLogin()">Login (進入)</button>
-        </div>
-    </div>
+    
     <div id="status-modal" style="display: none;">
         <div class="modal-box">
             <div id="status-spinner" class="spinner"></div>
@@ -127,10 +119,6 @@
                 <button onclick="closeSettings()" style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
             </div>
             <div class="settings-content-group">
-                <div class="modal-group" style="background: #f9f9f9; padding: 10px; border-radius: 8px; border: 1px dashed #ccc;">
-                    <label style="color:#d63384; font-weight: bold; margin-bottom: 5px; display: block;">🔑 Login Password</label>
-                    <input type="text" id="set-password" class="login-input" style="margin: 0;" placeholder="Current: 12345">
-                </div>
                 <div class="modal-group">
                     <label style="font-weight: bold; margin-bottom: 5px; display: block;">1. Voice Timeout (秒)</label>
                     <input type="number" id="set-timeout" class="login-input" style="margin: 0;" placeholder="Default: 1.5">
@@ -173,8 +161,7 @@
     <div id="app-screen" style="display: none;">
         <div class="author-header">Author: DERER LIN (v4.7 - Fix Voice Duplication)</div>
         <div class="header">
-            <div class="header-btn" onclick="logout()" title="Logout">🔒</div>
-            <div class="header-title"><h2>Machine-NG MX<br>混練機械故障資訊</h2></div>
+            <div style="width: 36px;"></div> <div class="header-title"><h2>Machine-NG MX<br>混練機械故障資訊</h2></div>
             <div class="header-btn" onclick="openSettings()" title="Settings">⚙️</div>
         </div>
         <div class="input-group">
@@ -260,7 +247,7 @@
     </div>
 
 <script>
-    const DEFAULT_PASS = "12345"; const MAX_IMAGE_WIDTH = 1000;
+    const MAX_IMAGE_WIDTH = 1000;
     const MACHINE_LIST_KEY = "cfg_machine_list"; const CONCERN_LIST_KEY = "cfg_concern_list"; const EMPLOYEE_ID_KEY = "cfg_employee_id";
     const DEFAULT_MACHINE_LIST = ["BM5", "BM6", "BM7", "BM21", "BM22", "BM23", "CA3", "CA4", "CM1", "CM2", "CM3"];
     const DEFAULT_CONCERN_LIST = ["Mixing", "Extrusion", "Cutting", "Calendering"];
@@ -274,14 +261,12 @@
     
     const GAS_URL = `https://script.google.com/macros/s/${FIXED_SCRIPT_ID}/exec`;
 
-    // 修正語音變數
     let processedImageBase64 = "", recognition = null, isRecording = false, activeTextAreaId = null;
-    let initialText = "", currentSessionFinal = "", punctuationTimer = null; // 修正邏輯用的變數
+    let initialText = "", currentSessionFinal = "", punctuationTimer = null;
 
     document.addEventListener('DOMContentLoaded', () => { initApp(); });
 
     function initApp() {
-        if(!localStorage.getItem("app_password")) localStorage.setItem("app_password", DEFAULT_PASS);
         if(!localStorage.getItem(MACHINE_LIST_KEY)) localStorage.setItem(MACHINE_LIST_KEY, JSON.stringify(DEFAULT_MACHINE_LIST));
         if(!localStorage.getItem(CONCERN_LIST_KEY)) localStorage.setItem(CONCERN_LIST_KEY, JSON.stringify(DEFAULT_CONCERN_LIST));
         if(!localStorage.getItem("cfg_timeout")) localStorage.setItem("cfg_timeout", DEFAULT_VOICE_TIMEOUT);
@@ -293,21 +278,19 @@
         document.getElementById('input-total-time').value = ""; document.getElementById('input-total-time').style.backgroundColor = '#eee';
         document.getElementById('total-time-unit').value = "min"; 
         
-        const isLoggedIn = localStorage.getItem("isLoggedIn");
-        if(isLoggedIn === "true") {
-            document.getElementById('app-screen').style.display = 'block'; document.getElementById('login-screen').style.display = 'none';
-            applySettings(); loadRecentRecords();
-        } else {
-            document.getElementById('app-screen').style.display = 'none'; document.getElementById('login-screen').style.display = 'flex';
-        }
+        // 修改：直接顯示 App，不檢查登入
+        document.getElementById('app-screen').style.display = 'block';
+        applySettings(); 
+        loadRecentRecords();
     }
 
-    function checkLogin(){const i=document.getElementById('loginPass').value;if(i===localStorage.getItem("app_password")){localStorage.setItem("isLoggedIn","true");document.getElementById('login-screen').style.display='none';document.getElementById('app-screen').style.display='block';applySettings();loadRecentRecords()}else{alert("Password incorrect.")}}
-    function logout(){if(confirm("Logout?")){localStorage.removeItem("isLoggedIn");document.getElementById('app-screen').style.display='none';document.getElementById('login-screen').style.display='flex';document.getElementById('loginPass').value=''}}
-    function openSettings(){document.getElementById('settings-modal').style.display='flex';renderConcernListSettings();renderMachineListSettings();document.getElementById('set-password').value=''}
+    // 移除 checkLogin 和 logout 函式
+
+    function openSettings(){document.getElementById('settings-modal').style.display='flex';renderConcernListSettings();renderMachineListSettings();}
     function closeSettings(){document.getElementById('settings-modal').style.display='none'}
+    
     function saveSettings(){
-        const p=document.getElementById('set-password').value.trim();if(p)localStorage.setItem("app_password",p);
+        // 移除密碼儲存邏輯
         const t=parseFloat(document.getElementById('set-timeout').value);if(!isNaN(t))localStorage.setItem("cfg_timeout",t);
         const limit = parseInt(document.getElementById('set-recent-limit').value);
         if(!isNaN(limit) && limit > 0) localStorage.setItem("cfg_recent_limit", limit);
@@ -317,6 +300,7 @@
         alert("Saved!");closeSettings();applySettings();
         loadRecentRecords();
     }
+    
     function loadSettingsToUI(){
         document.getElementById('set-timeout').value=localStorage.getItem("cfg_timeout")||DEFAULT_VOICE_TIMEOUT;
         document.getElementById('set-ratio').value=localStorage.getItem("cfg_ratio")||'4/3';
@@ -430,7 +414,6 @@
         if (isRecording) { manualStopVoice(); } else { activeTextAreaId = button.dataset.target; startVoice(button); }
     }
 
-    // ✅ 已修正：語音輸入不再重複
     function startVoice(button) {
         isRecording = true; button.classList.add('recording'); button.innerHTML = '🔴 錄音中...';
         recognition = new webkitSpeechRecognition(); recognition.continuous = true; recognition.interimResults = true;
@@ -438,12 +421,11 @@
         
         const targetElement = document.getElementById(activeTextAreaId);
         
-        // 鎖定初始文字 (Snaphot)
         initialText = targetElement.value; 
         if (initialText.length > 0 && !initialText.endsWith(' ') && !initialText.endsWith('\n')) {
             initialText += ' ';
         }
-        currentSessionFinal = ''; // 清空本次對話紀錄
+        currentSessionFinal = ''; 
 
         recognition.onstart = function() { clearTimeout(punctuationTimer); };
 
@@ -451,7 +433,6 @@
             clearTimeout(punctuationTimer); 
             let interimTranscript = '';
             
-            // 重新計算本次所有的 finalized 文字 (這樣才不會重複疊加)
             currentSessionFinal = ''; 
 
             for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -462,7 +443,6 @@
                 }
             }
             
-            // 介面永遠顯示：【初始文字】 + 【這次講完的】 + 【正在講的】
             targetElement.value = initialText + currentSessionFinal + interimTranscript;
             
             const timeout = parseFloat(localStorage.getItem("cfg_timeout") || DEFAULT_VOICE_TIMEOUT) * 1000;
@@ -478,7 +458,6 @@
         recognition.onend = function() {
             if (isRecording) {
                 try { 
-                    // 重新開始時，更新初始文字 (把剛講完的變成初始文字)
                     const el = document.getElementById(activeTextAreaId);
                     if(el) {
                         initialText = el.value;
@@ -576,5 +555,3 @@ ${action}`;
 </script>
 </body>
 </html>
-
-
