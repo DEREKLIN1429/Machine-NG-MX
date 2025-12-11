@@ -159,7 +159,7 @@
     </div>
 
     <div id="app-screen" style="display: none;">
-        <div class="author-header">Author: DERER LIN (v4.7 - Fix Voice Duplication)</div>
+        <div class="author-header">Author: DERER LIN (v5.0 - MX Fixed)</div>
         <div class="header">
             <div style="width: 36px;"></div> <div class="header-title"><h2>Machine-NG MX<br>混練機械故障資訊</h2></div>
             <div class="header-btn" onclick="openSettings()" title="Settings">⚙️</div>
@@ -262,7 +262,7 @@
     const GAS_URL = `https://script.google.com/macros/s/${FIXED_SCRIPT_ID}/exec`;
 
     let processedImageBase64 = "", recognition = null, isRecording = false, activeTextAreaId = null;
-    let initialText = "", currentSessionFinal = "", punctuationTimer = null;
+    let initialText = "", currentSessionFinal = "", punctuationTimer = null; 
 
     document.addEventListener('DOMContentLoaded', () => { initApp(); });
 
@@ -278,19 +278,15 @@
         document.getElementById('input-total-time').value = ""; document.getElementById('input-total-time').style.backgroundColor = '#eee';
         document.getElementById('total-time-unit').value = "min"; 
         
-        // 修改：直接顯示 App，不檢查登入
         document.getElementById('app-screen').style.display = 'block';
         applySettings(); 
         loadRecentRecords();
     }
 
-    // 移除 checkLogin 和 logout 函式
-
     function openSettings(){document.getElementById('settings-modal').style.display='flex';renderConcernListSettings();renderMachineListSettings();}
     function closeSettings(){document.getElementById('settings-modal').style.display='none'}
     
     function saveSettings(){
-        // 移除密碼儲存邏輯
         const t=parseFloat(document.getElementById('set-timeout').value);if(!isNaN(t))localStorage.setItem("cfg_timeout",t);
         const limit = parseInt(document.getElementById('set-recent-limit').value);
         if(!isNaN(limit) && limit > 0) localStorage.setItem("cfg_recent_limit", limit);
@@ -300,7 +296,6 @@
         alert("Saved!");closeSettings();applySettings();
         loadRecentRecords();
     }
-    
     function loadSettingsToUI(){
         document.getElementById('set-timeout').value=localStorage.getItem("cfg_timeout")||DEFAULT_VOICE_TIMEOUT;
         document.getElementById('set-ratio').value=localStorage.getItem("cfg_ratio")||'4/3';
@@ -332,30 +327,68 @@
     function loadEmployeeID(){const v=localStorage.getItem(EMPLOYEE_ID_KEY);if(v)document.getElementById('input-employee-id').value=v}
     function saveEmployeeID(){const v=document.getElementById('input-employee-id').value.trim();if(v)localStorage.setItem(EMPLOYEE_ID_KEY,v)}
     
-    const DATETIME_REGEX = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/;
-    function parseCustomDateTime(dtStr) {
-        if(!dtStr) return null;
-        const s = dtStr.trim(); 
-        const match = s.match(DATETIME_REGEX);
-        if (!match) return null;
-        const day = parseInt(match[1], 10);
-        const month = parseInt(match[2], 10) - 1; 
-        const year = parseInt(match[3], 10);
-        const hour = parseInt(match[4], 10);
-        const minute = parseInt(match[5], 10);
-        const date = new Date(year, month, day, hour, minute);
-        if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) return null;
-        return date;
+    // ====================================================================
+    // ⬇️ 日期時間核心修復區域 (解決 Invalid Format 與 格式不一致問題)
+    // ====================================================================
+
+    // 1. 產生標準格式字串 (給按鈕用) -> 強制輸出 DD/MM/YYYY HH:mm (IST時間)
+    function getFullDateTimeString(dateObj) {
+        // 先轉成 UTC
+        const utc = dateObj.getTime() + (dateObj.getTimezoneOffset() * 60000);
+        // 再轉成 IST (UTC + 5.5)
+        const istDate = new Date(utc + (3600000 * 5.5)); 
+        
+        const day = String(istDate.getDate()).padStart(2, '0');
+        const month = String(istDate.getMonth() + 1).padStart(2, '0');
+        const year = istDate.getFullYear();
+        const hour = String(istDate.getHours()).padStart(2, '0');
+        const minute = String(istDate.getMinutes()).padStart(2, '0');
+        
+        // 嚴格標準格式: DD/MM/YYYY HH:mm
+        return `${day}/${month}/${year} ${hour}:${minute}`;
     }
-    
+
+    // 2. 智慧解析函數：同時支援 DD/MM/YYYY 和 YYYY/MM/DD
+    function parseCustomDateTime(dtStr) {
+        if (!dtStr) return null;
+        let s = dtStr.trim();
+        s = s.replace(/-/g, '/').replace('T', ' '); // 將 - 轉為 /，T 轉為空格 (相容 ISO)
+
+        // 嘗試匹配格式 A: DD/MM/YYYY HH:mm (標準前端格式)
+        // 邏輯: 日/月/年 (年是4位數在最後)
+        let dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::\d{2})?$/);
+        
+        // 嘗試匹配格式 B: YYYY/MM/DD HH:mm (標準後端格式)
+        // 邏輯: 年/月/日 (年是4位數在最前)
+        let ymd = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})(?::\d{2})?$/);
+
+        if (dmy) {
+            // DD/MM/YYYY -> new Date(year, month-1, day, ...)
+            return new Date(parseInt(dmy[3]), parseInt(dmy[2])-1, parseInt(dmy[1]), parseInt(dmy[4]), parseInt(dmy[5]));
+        } else if (ymd) {
+            // YYYY/MM/DD -> new Date(year, month-1, day, ...)
+            return new Date(parseInt(ymd[1]), parseInt(ymd[2])-1, parseInt(ymd[3]), parseInt(ymd[4]), parseInt(ymd[5]));
+        } else {
+            // 嘗試系統原生解析
+            let d = new Date(s);
+            return isNaN(d) ? null : d;
+        }
+    }
+
+    // ====================================================================
+    // ⬆️ 日期時間核心修復區域結束
+    // ====================================================================
+
     function calculateTotalStopTime() {
         const s1 = document.getElementById('input-stop-time-full').value;
         const s2 = document.getElementById('input-start-time-full').value;
         const t = document.getElementById('input-total-time');
         const u = document.getElementById('total-time-unit').value;
         if(!s1||!s2){ t.value=""; t.style.background='#eee'; return; }
+        
         const d1 = parseCustomDateTime(s1);
         const d2 = parseCustomDateTime(s2);
+        
         if(!d1||!d2){ t.value="Invalid Format"; t.style.background='#fdd'; return; }
         const diff = Math.round((d2 - d1) / 60000);
         if(diff <= 0){ t.value="0 (Check Time)"; t.style.background='#fdd'; return; }
@@ -363,16 +396,6 @@
         t.style.background='#e6ffed';
     }
     
-    function getFullDateTimeString(dateObj) {
-        const utc = dateObj.getTime() + (dateObj.getTimezoneOffset() * 60000);
-        const istDate = new Date(utc + (3600000 * 5.5));
-        const day = String(istDate.getDate()).padStart(2, '0');
-        const month = String(istDate.getMonth() + 1).padStart(2, '0');
-        const year = istDate.getFullYear();
-        const hour = String(istDate.getHours()).padStart(2, '0');
-        const minute = String(istDate.getMinutes()).padStart(2, '0');
-        return `${day}/${month}/${year} ${hour}:${minute}`;
-    }
     function updateSingleTime(id){const n=new Date();document.getElementById(id).value=getFullDateTimeString(n);calculateTotalStopTime()}
     
     function loadRecentRecords(){
@@ -392,19 +415,39 @@
         }).catch(e=>{listContainer.innerHTML='<p style="text-align: center; color: red;">❌ 載入失敗。</p>'})
     }
 
+    // 🔴 修正：強制轉換並統一回填的時間格式
     function populateForm(f){
         if(!confirm(`回填單號 [${f}]?`))return;showStatus('loading','Loading...',f);
         fetch(`${GAS_URL}?action=getRow&formNo=${encodeURIComponent(f)}`).then(r=>r.json()).then(res=>{
             if(res.result==='success'){
-                const d=res.data;processedImageBase64="";document.getElementById('preview-img').style.display='none';document.querySelector('.placeholder').style.display='block';
-                document.getElementById('input-employee-id').value=d.employeeId;document.getElementById('input-machine').value=d.machine;
-                document.getElementById('input-form-no').value=d.formNo;document.getElementById('input-stop-time-full').value=d.stopTimeFull?d.stopTimeFull.trim():"";
-                document.getElementById('input-start-time-full').value=d.startTimeFull?d.startTimeFull.trim():"";document.getElementById('input-concern-section').value=d.concernSection;
-                document.getElementById('input-reason').value=d.reason;document.getElementById('input-solution').value=d.solution;document.getElementById('input-self-actions').value=d.selfActions;
-                calculateTotalStopTime();showStatus('success','Loaded','');setTimeout(closeStatusModal,1000)
+                const d=res.data;
+                processedImageBase64="";
+                document.getElementById('preview-img').style.display='none';
+                document.querySelector('.placeholder').style.display='block';
+                
+                document.getElementById('input-employee-id').value=d.employeeId;
+                document.getElementById('input-machine').value=d.machine;
+                document.getElementById('input-form-no').value=d.formNo;
+
+                // 強制轉換為 DD/MM/YYYY HH:mm
+                const stopObj = parseCustomDateTime(d.stopTimeFull);
+                document.getElementById('input-stop-time-full').value = stopObj ? getFullDateTimeString(stopObj) : (d.stopTimeFull || "");
+
+                const startObj = parseCustomDateTime(d.startTimeFull);
+                document.getElementById('input-start-time-full').value = startObj ? getFullDateTimeString(startObj) : (d.startTimeFull || "");
+
+                document.getElementById('input-concern-section').value=d.concernSection;
+                document.getElementById('input-reason').value=d.reason;
+                document.getElementById('input-solution').value=d.solution;
+                document.getElementById('input-self-actions').value=d.selfActions;
+                
+                calculateTotalStopTime();
+                showStatus('success','Loaded','');
+                setTimeout(closeStatusModal,1000)
             }else{showStatus('error','Failed',res.error)}
         }).catch(e=>showStatus('error','Error','Network'))
     }
+
     function triggerFile(id){document.getElementById(id).click()}
     function handleFile(i){if(i.files[0]){showStatus('loading','Processing...','');const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>processImageWithCanvas(img);img.src=e.target.result};r.readAsDataURL(i.files[0])}}
     function processImageWithCanvas(img){const c=document.createElement('canvas');let w=img.width;let h=img.height;if(w>MAX_IMAGE_WIDTH){h=Math.round(h*(MAX_IMAGE_WIDTH/w));w=MAX_IMAGE_WIDTH}c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);processedImageBase64=c.toDataURL('image/jpeg',0.8);document.getElementById('preview-img').src=processedImageBase64;document.getElementById('preview-img').style.display='block';document.querySelector('.placeholder').style.display='none';closeStatusModal()}
@@ -432,17 +475,11 @@
         recognition.onresult = function(event) {
             clearTimeout(punctuationTimer); 
             let interimTranscript = '';
-            
             currentSessionFinal = ''; 
-
             for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) { 
-                    currentSessionFinal += event.results[i][0].transcript; 
-                } else { 
-                    interimTranscript += event.results[i][0].transcript; 
-                }
+                if (event.results[i].isFinal) { currentSessionFinal += event.results[i][0].transcript; } 
+                else { interimTranscript += event.results[i][0].transcript; }
             }
-            
             targetElement.value = initialText + currentSessionFinal + interimTranscript;
             
             const timeout = parseFloat(localStorage.getItem("cfg_timeout") || DEFAULT_VOICE_TIMEOUT) * 1000;
@@ -466,9 +503,7 @@
                     currentSessionFinal = '';
                     recognition.start(); 
                 } catch(e) { console.warn("Restart failed"); }
-            } else {
-                resetVoiceUI();
-            }
+            } else { resetVoiceUI(); }
         };
 
         try { recognition.start(); } catch(e) { console.warn("Start failed"); }
@@ -476,10 +511,9 @@
 
     function manualStopVoice() {
         isRecording = false; 
-        if (recognition) { 
-            clearTimeout(punctuationTimer); 
-            recognition.stop(); 
-        }
+        if (recognition) { clearTimeout(punctuationTimer); recognition.stop(); }
+        const el = document.getElementById(activeTextAreaId);
+        if(el) el.dispatchEvent(new Event('input')); // 觸發事件
         resetVoiceUI();
     }
 
